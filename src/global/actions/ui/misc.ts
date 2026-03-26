@@ -15,10 +15,11 @@ import { getAllNotificationsCount } from '../../../util/folderManager';
 import getIsAppUpdateNeeded from '../../../util/getIsAppUpdateNeeded';
 import getReadableErrorText from '../../../util/getReadableErrorText';
 import { compact, unique } from '../../../util/iteratees';
-import { refreshFromCache } from '../../../util/localization';
+import { getTranslationFn, refreshFromCache } from '../../../util/localization';
 import * as langProvider from '../../../util/oldLangProvider';
 import updateIcon from '../../../util/updateIcon';
 import { setPageTitle, setPageTitleInstant } from '../../../util/updatePageTitle';
+import { callApi } from '../../../api/gramjs';
 import { canEditMediaInEditor, getAllowedAttachmentOptions, getChatTitle } from '../../helpers';
 import { addTabStateResetterAction } from '../../helpers/meta';
 import {
@@ -45,6 +46,13 @@ import { selectSharedSettings } from '../../selectors/sharedState';
 import { selectDraft, selectEditingId } from '../../selectors/threads';
 
 import { getIsMobile, getIsTablet } from '../../../hooks/useAppLayout';
+
+function postTelegramSessionLinkResult(payload: { ok: true } | { ok: false; error: string }) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  window.postMessage({ type: 'telegram-session:link-result', ...payload }, '*');
+}
 
 export const APP_VERSION_URL = 'version.txt';
 const FLOOD_PREMIUM_WAIT_NOTIFICATION_DURATION = 6000;
@@ -425,6 +433,63 @@ addActionHandler('toggleSafeLinkModal', (global, actions, payload): ActionReturn
   return updateTabState(global, {
     safeLinkModalUrl,
   }, tabId);
+});
+
+addActionHandler('requestDesktopSessionLink', (global, actions, payload): ActionReturnType => {
+  const { tokenBase64, expires, tabId = getCurrentTabId() } = payload;
+
+  return updateTabState(global, {
+    desktopSessionLinkRequest: {
+      tokenBase64,
+      expires,
+    },
+  }, tabId);
+});
+
+addActionHandler('closeDesktopSessionLink', (global, actions, payload): ActionReturnType => {
+  const { tabId = getCurrentTabId() } = payload || {};
+
+  return updateTabState(global, {
+    desktopSessionLinkRequest: undefined,
+  }, tabId);
+});
+
+addActionHandler('cancelDesktopSessionLink', (global, actions, payload): ActionReturnType => {
+  const { tabId = getCurrentTabId() } = payload || {};
+
+  postTelegramSessionLinkResult({ ok: false, error: 'User cancelled' });
+
+  return updateTabState(global, {
+    desktopSessionLinkRequest: undefined,
+  }, tabId);
+});
+
+addActionHandler('confirmDesktopSessionLink', async (global, actions, payload): Promise<void> => {
+  const { tabId = getCurrentTabId() } = payload || {};
+  const { desktopSessionLinkRequest } = selectTabState(global, tabId);
+  const token = desktopSessionLinkRequest?.tokenBase64?.trim();
+
+  if (!token) {
+    actions.closeDesktopSessionLink({ tabId });
+    postTelegramSessionLinkResult({ ok: false, error: 'Missing token' });
+    return;
+  }
+
+  const lang = getTranslationFn();
+  const result = await callApi('acceptLoginToken', token);
+
+  actions.closeDesktopSessionLink({ tabId });
+
+  if (result.ok) {
+    actions.showNotification({ message: lang('DesktopLinkNativeSuccess'), tabId });
+    postTelegramSessionLinkResult({ ok: true });
+  } else {
+    actions.showNotification({
+      message: lang('DesktopLinkNativeFailed', { error: result.error }),
+      tabId,
+    });
+    postTelegramSessionLinkResult({ ok: false, error: result.error });
+  }
 });
 
 addActionHandler('openHistoryCalendar', (global, actions, payload): ActionReturnType => {

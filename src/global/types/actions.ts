@@ -2395,6 +2395,14 @@ export interface ActionPayloads {
   toggleSafeLinkModal: {
     url?: string;
   } & WithTabId;
+  requestDesktopSessionLink: {
+    tokenBase64: string;
+    expires?: number;
+  } & WithTabId;
+  closeDesktopSessionLink: WithTabId | undefined;
+  /** User dismissed the link modal; posts `telegram-session:link-result` with ok: false. */
+  cancelDesktopSessionLink: WithTabId | undefined;
+  confirmDesktopSessionLink: WithTabId | undefined;
   closeUrlAuthModal: WithTabId | undefined;
   showNotification: Omit<ApiNotification, 'localId'> & { localId?: string } & WithTabId;
   showAllowedMessageTypesNotification: {

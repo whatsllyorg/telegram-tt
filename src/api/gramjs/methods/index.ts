@@ -1,5 +1,7 @@
 export {
-  destroy, disconnect, downloadMedia, fetchCurrentUser, repairFileReference, abortChatRequests, abortRequestGroup,
+  acceptLoginToken,
+  destroy, disconnect, downloadMedia, fetchCurrentUser, repairFileReference, abortChatRequests,
+  abortRequestGroup,
   setForceHttpTransport, setShouldDebugExportedSenders, setAllowHttpTransport, requestChannelDifference,
 } from './client';
 
@@ -10,7 +12,8 @@ export {
 
 export {
   broadcastLocalDbUpdateFull,
-  getLocalDbData, // MODIFICATION: Added for external data access (GPL-3.0)
+  getLocalDbData,
+  getLocalDbMediaMetadata,
 } from '../localDb';
 
 export * from './account';

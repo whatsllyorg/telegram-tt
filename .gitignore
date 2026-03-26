@@ -9,4 +9,5 @@ tests/
 *.iml
 dev/perf/screenshot*
 .DS_store
-!.github/workflows/package-and-publish.yml
+.github/workflows/*
+!.github/workflows/deploy-web-s3.yml

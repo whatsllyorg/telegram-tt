@@ -1967,6 +1967,10 @@ export interface LangPair {
   'SettingsDataClearMediaCache': undefined;
   'SettingsDataClearMediaCacheDescription': undefined;
   'SettingsDataClearMediaDone': undefined;
+  'DesktopLinkNativeTitle': undefined;
+  'DesktopLinkNativeMessage': undefined;
+  'DesktopLinkNativeConfirm': undefined;
+  'DesktopLinkNativeSuccess': undefined;
   'LeaveGroupAppointOwner': undefined;
   'LeaveGroupAdmins': undefined;
   'LeaveGroupMembers': undefined;
@@ -3482,6 +3486,9 @@ export interface LangPairWithVariables<V = LangVariable> {
   'GroupStatusWithOnline': {
     'status': V;
     'onlineCount': V;
+  };
+  'DesktopLinkNativeFailed': {
+    'error': V;
   };
   'LeaveGroupTitle': {
     'group': V;

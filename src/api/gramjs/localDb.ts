@@ -140,31 +140,70 @@ export function clearLocalDb() {
   Object.assign(localDb, createLocalDbInitial());
 }
 
-// MODIFICATION: Added getLocalDbData() function
-// Purpose: Export localDb for external access (e.g., scrapers, integrations)
-// License: GPL-3.0 (same as original)
-// See: MODIFICATIONS.md for details
-export function getLocalDbData(): LocalDb {
-  // Return a deep clone to avoid sending non-cloneable GramJS instances
-  // The localDb already contains plain objects after being processed by createProxy
-  return JSON.parse(JSON.stringify(localDb, (key, value) => {
-    // Handle BigInt serialization
-    if (typeof value === 'bigint') {
-      return value.toString();
-    }
-    // Handle Uint8Array/Buffer (fileReference, etc.)
-    if (value && typeof value === 'object') {
-      if (value.type === 'Buffer' && Array.isArray(value.data)) {
-        return value.data;
-      }
-      if (ArrayBuffer.isView(value)) {
-        return Array.from(value as Uint8Array);
-      }
-    }
-    return value;
-  }));
+export type LocalDbMediaMetadata = Pick<LocalDb, 'documents' | 'photos' | 'webDocuments'>;
+
+function yieldToEventLoop(): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, 0);
+  });
 }
-// END MODIFICATION
+
+function localDbToJsonReplacer(_key: string, value: unknown): unknown {
+  if (typeof value === 'bigint') {
+    return value.toString();
+  }
+  if (value && typeof value === 'object') {
+    const v = value as Record<string, unknown>;
+    if (v.type === 'Buffer' && Array.isArray(v.data)) {
+      return v.data;
+    }
+    if (ArrayBuffer.isView(value)) {
+      return Array.from(value as Uint8Array);
+    }
+  }
+  return value;
+}
+
+/** Stringify one top-level bucket; keeps property order stable for replacer. */
+function serializeBucket(name: string, bucket: unknown): unknown {
+  const piece = JSON.parse(JSON.stringify({ [name]: bucket }, localDbToJsonReplacer)) as Record<string, unknown>;
+  return piece[name];
+}
+
+/**
+ * Media-related tables only (documents, photos, webDocuments). Much cheaper than getLocalDbData.
+ * Prefer this for scrapers / download metadata.
+ * Serializes each table separately and yields between them so the GramJS worker can process MTProto between chunks.
+ */
+export async function getLocalDbMediaMetadata(): Promise<LocalDbMediaMetadata> {
+  await yieldToEventLoop();
+  const documents = serializeBucket('documents', localDb.documents) as LocalDbMediaMetadata['documents'];
+  await yieldToEventLoop();
+  const photos = serializeBucket('photos', localDb.photos) as LocalDbMediaMetadata['photos'];
+  await yieldToEventLoop();
+  const webDocuments = serializeBucket('webDocuments', localDb.webDocuments) as LocalDbMediaMetadata['webDocuments'];
+  return { documents, photos, webDocuments };
+}
+
+/**
+ * Full localDb as JSON-safe plain objects. Heavy — throttle (e.g. ≤1/s).
+ * Serializes each top-level bucket separately with a yield between buckets so the worker event loop
+ * can run GramJS recv between chunks. A single huge bucket (e.g. documents) can still block for a long time.
+ */
+export async function getLocalDbData(): Promise<LocalDb> {
+  await yieldToEventLoop();
+  const merged: Record<string, unknown> = {};
+  const db = localDb as unknown as Record<string, unknown>;
+  const keys = Object.keys(db);
+  for (let i = 0; i < keys.length; i++) {
+    const key = keys[i];
+    merged[key] = serializeBucket(key, db[key]);
+    if (i < keys.length - 1) {
+      await yieldToEventLoop();
+    }
+  }
+  return merged as unknown as LocalDb;
+}
 
 if (DEBUG) {
   (globalThis as any).getLocalDb = () => localDb;
